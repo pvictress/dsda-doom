@@ -1135,6 +1135,10 @@ void gld_EndDrawScene(void)
   if (fuzz_overlap)
   {
     color_rgb_t color = gld_LookupIndexedColor(invul_cm ? playpal_lightest : playpal_darkest, true);
+    // [PN] The psprite pass relies on the depth/blend state left by the world
+    // pass; save and restore it instead of assuming defaults
+    GLboolean depth_test = glIsEnabled(GL_DEPTH_TEST);
+    GLboolean blend = glIsEnabled(GL_BLEND);
     int k;
 
     glsl_PushNullShader();
@@ -1168,7 +1172,12 @@ void gld_EndDrawScene(void)
     glClear(GL_STENCIL_BUFFER_BIT);
     glStencilFunc(GL_ALWAYS, 0, 0xFF);
     glDisable(GL_STENCIL_TEST);
-    glEnable(GL_DEPTH_TEST);
+    if (depth_test)
+      glEnable(GL_DEPTH_TEST);
+    else
+      glDisable(GL_DEPTH_TEST);
+    if (!blend)
+      glDisable(GL_BLEND);
     gld_EnableTexture2D(GL_TEXTURE0_ARB, true);
     glsl_PopNullShader();
 
