@@ -1347,6 +1347,61 @@ static const float fuzz[50] =
 
 static GLuint fuzz_texid = 0;
 
+// [PN] Copy of the frame buffer used to smear the fuzz background
+static GLuint fuzzscene_texid = 0;
+static GLint fuzzscene_prev = 0;
+static int fuzzscene_width = 0;
+static int fuzzscene_height = 0;
+static dboolean fuzzscene_ok = true;
+
+dboolean gld_BindFuzzScene(void)
+{
+  GLEXT_glActiveTextureARB(GL_TEXTURE2_ARB);
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &fuzzscene_prev);
+
+  if (fuzzscene_texid == 0)
+    glGenTextures(1, &fuzzscene_texid);
+
+  glBindTexture(GL_TEXTURE_2D, fuzzscene_texid);
+
+  if (fuzzscene_width != SCREENWIDTH || fuzzscene_height != SCREENHEIGHT)
+  {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREENWIDTH, SCREENHEIGHT, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    fuzzscene_width = SCREENWIDTH;
+    fuzzscene_height = SCREENHEIGHT;
+    fuzzscene_ok = true;
+  }
+
+  if (fuzzscene_ok)
+  {
+    // A multisampled frame buffer can't be copied directly
+    while (glGetError() != GL_NO_ERROR);
+
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0,
+                        fuzzscene_width, fuzzscene_height);
+
+    if (glGetError() != GL_NO_ERROR)
+      fuzzscene_ok = false;
+  }
+
+  GLEXT_glActiveTextureARB(GL_TEXTURE0_ARB);
+
+  return fuzzscene_ok;
+}
+
+void gld_UnbindFuzzScene(void)
+{
+  GLEXT_glActiveTextureARB(GL_TEXTURE2_ARB);
+  glBindTexture(GL_TEXTURE_2D, fuzzscene_prev);
+  GLEXT_glActiveTextureARB(GL_TEXTURE0_ARB);
+}
+
 void gld_InitFuzzTexture(void)
 {
   if (fuzz_texid == 0)
@@ -1428,6 +1483,16 @@ void gld_FlushTextures(void)
     glDeleteTextures(1, &fuzz_texid);
     fuzz_texid = 0;
   }
+
+  if (fuzzscene_texid)
+  {
+    glDeleteTextures(1, &fuzzscene_texid);
+    fuzzscene_texid = 0;
+  }
+
+  fuzzscene_width = 0;
+  fuzzscene_height = 0;
+  fuzzscene_ok = true;
 
   gld_ResetLastTexture();
 
