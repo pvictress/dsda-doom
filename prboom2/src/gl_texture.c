@@ -1347,15 +1347,15 @@ static const float fuzz[50] =
 
 static GLuint fuzz_texid = 0;
 
-// [PN] Scene copy for the fuzz smear; with blit support stored vertically
-// downscaled by the macro-pixel cell (the smear reads one row per cell).
+// [PN] Scene copy for the fuzz smear, stored vertically downscaled by the
+// macro-pixel cell (the smear reads one row per cell).
 static GLuint fuzzscene_texid = 0;
 static GLuint fuzzscene_fbo = 0;
 static GLint fuzzscene_prev = 0;
 static int fuzzscene_width = 0;
 static int fuzzscene_height = 0;
 static int fuzzscene_cell = 0;
-static int fuzzscene_frame = -1; // [PN] one snapshot per rendered frame
+static int fuzzscene_frame = -1; // one snapshot per rendered frame
 static dboolean fuzzscene_ok = true;
 static dboolean fuzzscene_probe = true;
 
@@ -1383,9 +1383,8 @@ dboolean gld_BindFuzzScene(int cell)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
-    // [PN] A blit can only land in a framebuffer, not in a bare texture, so
-    // wrap the scene texture in a one-color-attachment FBO once. The current
-    // draw target (the scene FBO) is saved and restored around the setup.
+    // [PN] A blit needs a framebuffer, so wrap the copy texture in an FBO once;
+    // the current draw target is saved and restored around the setup.
     if (gl_ext_framebuffer_blit && fuzzscene_fbo == 0)
     {
       GLint prev_fbo = 0;
@@ -1406,33 +1405,24 @@ dboolean gld_BindFuzzScene(int cell)
     fuzzscene_probe = true;
   }
 
-  // [PN] One snapshot per rendered frame: every fuzz sprite of the frame
-  // reuses it. The trade-off is no fuzz-on-fuzz stacking (each sprite smears
-  // the world, not each other), which is the accepted "single buffer"
-  // behavior upstream.
   if (fuzzscene_ok && fuzzscene_frame != rendermarker)
   {
-    // [PN] glGetError flushes the pipeline; checking it per fuzz sprite stalls
-    // rendering, so only the first copy after (re)allocation is probed.
-    // A multisampled frame buffer can't be copied directly
+    // [PN] glGetError flushes the pipeline, so only the first copy after
+    // (re)allocation is probed; a multisampled buffer can't be copied directly.
     if (fuzzscene_probe)
     while (glGetError() != GL_NO_ERROR);
 
-    // [PN] The capture itself: point the draw framebuffer at the wrapper FBO
-    // while the read framebuffer stays on whatever the scene renders into,
-    // then blit a (height * cell) tall source into the shorter texture, which
-    // is the NEAREST vertical downscale by cell. Without blit support fall
-    // back to a 1:1 copy into the full-height texture.
+    // [PN] Blit a source that is (height * cell) tall into the shorter texture:
+    // a NEAREST vertical downscale by cell; 1:1 copy without blit support.
     if (gl_ext_framebuffer_blit && fuzzscene_fbo)
     {
-      // Reads whatever the scene renders into (scene FBO or back buffer)
+      // Reads whatever the scene renders into (scene FBO or back buffer).
       GLint prev_fbo = 0;
 
       glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING_EXT, &prev_fbo);
       GLEXT_glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, fuzzscene_fbo);
-      // [PN] glBlitFramebuffer clips the destination by the scissor box,
-      // which during the world pass only covers the 3D viewport; with the
-      // status bar on that chops the bottom of the downscaled snapshot
+      // The blit is clipped by the scissor box (the 3D viewport during the
+      // world pass), so turn it off for the full-frame copy.
       glDisable(GL_SCISSOR_TEST);
       GLEXT_glBlitFramebufferEXT(0, 0, fuzzscene_width, fuzzscene_height * cell,
                                  0, 0, fuzzscene_width, fuzzscene_height,

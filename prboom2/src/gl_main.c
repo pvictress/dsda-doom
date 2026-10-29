@@ -759,8 +759,8 @@ void gld_DrawLine(int x0, int y0, int x1, int y1, int BaseColor)
 }
 
 
-static dboolean fuzz_overlap; // [PN] world fuzz silhouettes left stencil counts
-static int fuzz_sprites;       // [PN] world fuzz sprites drawn this frame
+static dboolean fuzz_overlap; // [PN] fuzz silhouettes left stencil counts
+static int fuzz_sprites;      // [PN] fuzz silhouettes in this frame
 
 void gld_StartFuzz(int sprite, float ratio)
 {
@@ -781,9 +781,8 @@ void gld_StartFuzz(int sprite, float ratio)
   if (smear)
     glDisable(GL_BLEND);
 
-  // [PN] Count overlapping silhouettes in the stencil (the alpha test already
-  // rejects transparent texels); gld_EndDrawScene turns counts >= 2 into the
-  // extra darkening layers that the shared snapshot cannot stack by itself
+  // [PN] Count overlapping silhouettes in the stencil; gld_EndDrawScene turns
+  // counts >= 2 into the extra darkening layers the shared snapshot cannot add.
   if (smear && sprite >= 0 && fuzz_sprites >= 2)
   {
     glEnable(GL_STENCIL_TEST);
@@ -810,9 +809,9 @@ void gld_EndFuzz()
 
   if (fuzz_overlap)
   {
-    // [PN] Keep the stencil test enabled: everything drawn after the last
-    // fuzz sprite is in front of it, so it has to clear the counts it covers.
-    // Otherwise the veil pass would darken sprites closer than the fuzz.
+    // [PN] Everything drawn after a fuzz sprite is in front of it, so keep the
+    // test enabled and let it clear the counts it covers. Otherwise the veil
+    // pass would darken sprites closer than the fuzz.
     glStencilFunc(GL_ALWAYS, 0, 0xFF);
     glStencilOp(GL_KEEP, GL_KEEP, GL_ZERO);
     glStencilMask(0xFF);
@@ -1130,10 +1129,8 @@ void gld_EndDrawScene(void)
   glViewport(0, 0, SCREENWIDTH, SCREENHEIGHT);
   gld_Set2DMode();
 
-  // [PN] Fuzz-over-fuzz darkening: the shared snapshot cannot stack the extra
-  // veil layers software gets from fuzz reading already-fuzzed pixels, so the
-  // veil quads counted their overlaps in the stencil. Add one veil layer where
-  // two silhouettes crossed, and another where three or more did.
+  // [PN] Fuzz-over-fuzz: the shared snapshot cannot stack extra darkening, so
+  // the stencil counts overlapping silhouettes and adds one veil layer per level.
   if (fuzz_overlap)
   {
     color_rgb_t color = gld_LookupIndexedColor(invul_cm ? playpal_lightest : playpal_darkest, true);
@@ -1149,7 +1146,7 @@ void gld_EndDrawScene(void)
     glColor4f((float)color.r / 255.0f, (float)color.g / 255.0f,
               (float)color.b / 255.0f, 0.25f);
 
-    // [PN] More layers than silhouettes could have stacked are pointless
+    // [PN] No more veil layers than fuzz silhouettes.
     for (k = 2; k <= MIN(fuzz_sprites, 6); k++)
     {
       glStencilFunc(GL_LEQUAL, k, 0xFF);
