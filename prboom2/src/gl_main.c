@@ -810,11 +810,12 @@ void gld_EndFuzz()
 
   if (fuzz_overlap)
   {
-    // Leave the stencil inert for the rest of the world pass
+    // [PN] Keep the stencil test enabled: everything drawn after the last
+    // fuzz sprite is in front of it, so it has to clear the counts it covers.
+    // Otherwise the veil pass would darken sprites closer than the fuzz.
     glStencilFunc(GL_ALWAYS, 0, 0xFF);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_ZERO);
     glStencilMask(0xFF);
-    glDisable(GL_STENCIL_TEST);
   }
 }
 
