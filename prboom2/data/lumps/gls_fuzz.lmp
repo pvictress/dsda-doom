@@ -37,6 +37,13 @@ float darkness(vec2 c)
 
 void main()
 {
+  // [PN] Transparent texels are rejected by the alpha test anyway, but only
+  // after the shader has run: skip the fuzz and scene fetches for them
+  float sprite = texture2D(tex, gl_TexCoord[0].xy).g;
+
+  if (sprite <= 0.0)
+    discard;
+
   // Ensure fuzz coordinate is identical for each fragment in fuzz macro-pixel
   vec2 c;
   float d;
@@ -51,7 +58,7 @@ void main()
     c = floor(gl_TexCoord[0].xy * tex_d);
 
     d = darkness(c);
-    alpha = texture2D(tex, gl_TexCoord[0].xy).g * d;
+    alpha = sprite * d;
 
  if (scene_d.x > 0.0)
  {
