@@ -574,6 +574,8 @@ enum
   FUZZ_UNIF_TEX_D,
   FUZZ_UNIF_FUZZ_D,
   FUZZ_UNIF_SCENE_D,
+  FUZZ_UNIF_VIEW_LO,
+  FUZZ_UNIF_VIEW_HI,
   FUZZ_UNIF_RATIO,
   FUZZ_UNIF_SEED
 };
@@ -605,6 +607,8 @@ static const shader_info_t fuzz_info =
     UNIF(FUZZ_UNIF_FUZZ_D, "fuzz_d", UNIF_TEX1D),
     UNIF(FUZZ_UNIF_SCENE, "scene", UNIF_TEX2),
     UNIF(FUZZ_UNIF_SCENE_D, "scene_d", UNIF_2F),
+    UNIF(FUZZ_UNIF_VIEW_LO, "view_lo", UNIF_2F),
+    UNIF(FUZZ_UNIF_VIEW_HI, "view_hi", UNIF_2F),
     UNIF(FUZZ_UNIF_RATIO, "ratio", UNIF_1F),
     UNIF(FUZZ_UNIF_SEED, "seed", UNIF_1F),
     UNIF_END
@@ -665,6 +669,8 @@ void glsl_PushFuzzShader(int tic, int sprite, float ratio, dboolean smear)
              FUZZ_UNIF_SCENE_D,
              smear ? (double)SCREENWIDTH : 0.0,
              smear ? (double)SCREENHEIGHT : 0.0,
+             FUZZ_UNIF_VIEW_LO, 0.0, (double)(SCREENHEIGHT - viewheight),
+             FUZZ_UNIF_VIEW_HI, (double)SCREENWIDTH, (double)SCREENHEIGHT,
              UNIF_VAL_END);
 }
 
