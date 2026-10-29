@@ -759,6 +759,8 @@ void gld_DrawLine(int x0, int y0, int x1, int y1, int BaseColor)
 }
 
 
+static dboolean fuzz_overlap; // [PN] world fuzz silhouettes left stencil counts
+
 void gld_StartFuzz(int sprite, float ratio)
 {
   color_rgb_t color;
@@ -778,6 +780,18 @@ void gld_StartFuzz(int sprite, float ratio)
   if (smear)
     glDisable(GL_BLEND);
 
+  // [PN] Count overlapping silhouettes in the stencil (the alpha test already
+  // rejects transparent texels); gld_EndDrawScene turns counts >= 2 into the
+  // extra darkening layers that the shared snapshot cannot stack by itself
+  if (smear && sprite >= 0)
+  {
+    glEnable(GL_STENCIL_TEST);
+    glStencilFunc(GL_ALWAYS, 0, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+    glStencilMask(0xFF);
+    fuzz_overlap = true;
+  }
+
   // for indexed lightmode, the fuzz color needs to take
   // pain/item fades and gamma into account, so do a color
   // lookup based on the closest-to-black color index.
@@ -792,6 +806,15 @@ void gld_EndFuzz()
   glsl_PopFuzzShader();
   glEnable(GL_BLEND);
   gld_UnbindFuzzScene();
+
+  if (fuzz_overlap)
+  {
+    // Leave the stencil inert for the rest of the world pass
+    glStencilFunc(GL_ALWAYS, 0, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    glStencilMask(0xFF);
+    glDisable(GL_STENCIL_TEST);
+  }
 }
 
 void gld_DrawWeapon(int weaponlump, vissprite_t *vis, int lightlevel)
@@ -1095,6 +1118,7 @@ void gld_StartDrawScene(void)
 
   rendermarker++;
   scene_has_overlapped_sprites = false;
+  fuzz_overlap = false;
 }
 
 void gld_EndDrawScene(void)
@@ -1103,6 +1127,53 @@ void gld_EndDrawScene(void)
 
   glViewport(0, 0, SCREENWIDTH, SCREENHEIGHT);
   gld_Set2DMode();
+
+  // [PN] Fuzz-over-fuzz darkening: the shared snapshot cannot stack the extra
+  // veil layers software gets from fuzz reading already-fuzzed pixels, so the
+  // veil quads counted their overlaps in the stencil. Add one veil layer where
+  // two silhouettes crossed, and another where three or more did.
+  if (fuzz_overlap)
+  {
+    color_rgb_t color = gld_LookupIndexedColor(invul_cm ? playpal_lightest : playpal_darkest, true);
+    int k;
+
+    glsl_PushNullShader();
+    gld_EnableTexture2D(GL_TEXTURE0_ARB, false);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_STENCIL_TEST);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    glStencilMask(0);
+    glColor4f((float)color.r / 255.0f, (float)color.g / 255.0f,
+              (float)color.b / 255.0f, 0.25f); // [PN] Fine-tune darkening: 0.45f
+
+    // [PN] Fine-tune darkening here, too
+    //for (k = 2; k <= 3; k++)
+    for (k = 2; k <= 6; k++)
+    {
+      // [PN] The test is ref CMP stencil, so "count >= k" is GL_LEQUAL(k)
+      glStencilFunc(GL_LEQUAL, k, 0xFF);
+      glBegin(GL_TRIANGLE_STRIP);
+      glVertex2f(0.0f, 0.0f);
+      glVertex2f(0.0f, (float)SCREENHEIGHT);
+      glVertex2f((float)SCREENWIDTH, 0.0f);
+      glVertex2f((float)SCREENWIDTH, (float)SCREENHEIGHT);
+      glEnd();
+    }
+
+    // Do not leave the counts behind for the next frame
+    glStencilMask(0xFF);
+    glClearStencil(0);
+    glClear(GL_STENCIL_BUFFER_BIT);
+    glStencilFunc(GL_ALWAYS, 0, 0xFF);
+    glDisable(GL_STENCIL_TEST);
+    glEnable(GL_DEPTH_TEST);
+    gld_EnableTexture2D(GL_TEXTURE0_ARB, true);
+    glsl_PopNullShader();
+
+    fuzz_overlap = false;
+  }
 
   glsl_PushMainShader();
   R_DrawPlayerSprites();
