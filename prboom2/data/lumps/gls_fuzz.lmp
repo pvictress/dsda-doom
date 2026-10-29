@@ -12,10 +12,9 @@ uniform vec2 tex_d;
 uniform vec2 fuzz_d;
 // Scene copy dimensions, zero when the copy is not available
 uniform vec2 scene_d;
-// 3D viewport rect in window coordinates, to keep the smear source
+// 3D viewport rows in window coordinates, to keep the smear source
 // inside the view (status bar and letterbox rows must not leak in)
-uniform vec2 view_lo;
-uniform vec2 view_hi;
+uniform vec2 view_y;
 // Fuzz macro-pixel ratio in terms of window coordinates
 // If 0, use texture coordinates instead
 uniform float ratio;
@@ -80,7 +79,7 @@ void main()
 
   // Clamp to the viewport: a sprite touching its border would pull in
   // the status bar line or the letterbox background from just outside
-  float row = clamp((t + 0.5) * cell, view_lo.y, view_hi.y - 1.0);
+  float row = clamp((t + 0.5) * cell, view_y.x, view_y.y - 1.0);
 
   vec3 bg = texture2D(scene, vec2(gl_FragCoord.x / scene_d.x, row / scene_d.y)).rgb;
   gl_FragColor = vec4(mix(bg, gl_Color.rgb, alpha), alpha);

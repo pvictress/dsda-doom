@@ -1427,7 +1427,6 @@ dboolean gld_BindFuzzScene(int cell)
     {
       // Reads whatever the scene renders into (scene FBO or back buffer)
       GLint prev_fbo = 0;
-      GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
 
       glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING_EXT, &prev_fbo);
       GLEXT_glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, fuzzscene_fbo);
@@ -1438,8 +1437,7 @@ dboolean gld_BindFuzzScene(int cell)
       GLEXT_glBlitFramebufferEXT(0, 0, fuzzscene_width, fuzzscene_height * cell,
                                  0, 0, fuzzscene_width, fuzzscene_height,
                                  GL_COLOR_BUFFER_BIT, GL_NEAREST);
-      if (scissor)
-        glEnable(GL_SCISSOR_TEST);
+      glEnable(GL_SCISSOR_TEST);
       GLEXT_glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, prev_fbo);
     }
     else
@@ -1563,12 +1561,8 @@ void gld_FlushTextures(void)
     fuzzscene_fbo = 0;
   }
 
+  // Force the texture and the wrapper FBO to be recreated on the next bind
   fuzzscene_width = 0;
-  fuzzscene_height = 0;
-  fuzzscene_cell = 0;
-  fuzzscene_frame = -1;
-  fuzzscene_ok = true;
-  fuzzscene_probe = true;
 
   gld_ResetLastTexture();
 

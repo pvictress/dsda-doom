@@ -1121,7 +1121,6 @@ void gld_StartDrawScene(void)
   rendermarker++;
   scene_has_overlapped_sprites = false;
   fuzz_overlap = false;
-  fuzz_sprites = 0;
 }
 
 void gld_EndDrawScene(void)
@@ -1137,52 +1136,30 @@ void gld_EndDrawScene(void)
   // two silhouettes crossed, and another where three or more did.
   if (fuzz_overlap)
   {
-    // [PN] A single silhouette cannot overlap anything, so skip the veil pass
-    // entirely and only clear the counts
-    if (fuzz_sprites >= 2)
+    color_rgb_t color = gld_LookupIndexedColor(invul_cm ? playpal_lightest : playpal_darkest, true);
+    int k;
+
+    glsl_PushNullShader();
+    gld_EnableTexture2D(GL_TEXTURE0_ARB, false);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_STENCIL_TEST);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+    glStencilMask(0);
+    glColor4f((float)color.r / 255.0f, (float)color.g / 255.0f,
+              (float)color.b / 255.0f, 0.25f);
+
+    // [PN] More layers than silhouettes could have stacked are pointless
+    for (k = 2; k <= MIN(fuzz_sprites, 6); k++)
     {
-      color_rgb_t color = gld_LookupIndexedColor(invul_cm ? playpal_lightest : playpal_darkest, true);
-      // [PN] The psprite pass relies on the depth/blend state left by the world
-      // pass; save and restore it instead of assuming defaults
-      GLboolean depth_test = glIsEnabled(GL_DEPTH_TEST);
-      GLboolean blend = glIsEnabled(GL_BLEND);
-      int k;
-
-      glsl_PushNullShader();
-      gld_EnableTexture2D(GL_TEXTURE0_ARB, false);
-      glDisable(GL_DEPTH_TEST);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      glEnable(GL_STENCIL_TEST);
-      glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-      glStencilMask(0);
-      glColor4f((float)color.r / 255.0f, (float)color.g / 255.0f,
-                (float)color.b / 255.0f, 0.25f); // [PN] Fine-tune darkening: 0.45f
-
-      // [PN] More layers than silhouettes could have stacked are pointless
-      for (k = 2; k <= MIN(fuzz_sprites, 6); k++)
-      {
-        // [PN] The test is ref CMP stencil, so "count >= k" is GL_LEQUAL(k)
-        glStencilFunc(GL_LEQUAL, k, 0xFF);
-        glBegin(GL_TRIANGLE_STRIP);
-        glVertex2f(0.0f, 0.0f);
-        glVertex2f(0.0f, (float)SCREENHEIGHT);
-        glVertex2f((float)SCREENWIDTH, 0.0f);
-        glVertex2f((float)SCREENWIDTH, (float)SCREENHEIGHT);
-        glEnd();
-      }
-
-      glStencilMask(0xFF);
-      glDisable(GL_STENCIL_TEST);
-      if (depth_test)
-        glEnable(GL_DEPTH_TEST);
-      else
-        glDisable(GL_DEPTH_TEST);
-      if (!blend)
-        glDisable(GL_BLEND);
-      gld_EnableTexture2D(GL_TEXTURE0_ARB, true);
-      glsl_PopNullShader();
+      glStencilFunc(GL_LEQUAL, k, 0xFF);
+      glRectf(0.0f, 0.0f, (GLfloat)SCREENWIDTH, (GLfloat)SCREENHEIGHT);
     }
+
+    glStencilMask(0xFF);
+    glDisable(GL_STENCIL_TEST);
+    gld_EnableTexture2D(GL_TEXTURE0_ARB, true);
+    glsl_PopNullShader();
 
     // Do not leave the counts behind for the next frame
     glStencilMask(0xFF);
@@ -1192,7 +1169,6 @@ void gld_EndDrawScene(void)
     glDisable(GL_STENCIL_TEST);
 
     fuzz_overlap = false;
-    fuzz_sprites = 0;
   }
 
   glsl_PushMainShader();
