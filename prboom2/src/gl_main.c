@@ -762,10 +762,21 @@ void gld_DrawLine(int x0, int y0, int x1, int y1, int BaseColor)
 void gld_StartFuzz(int sprite, float ratio)
 {
   color_rgb_t color;
+  dboolean smear;
+
+  // [PN] Mirrors the cell the shader uses for smear sampling.
+  const int cell = ratio > 0.0f ? (int)ratio : MAX(1, MIN(SCREENWIDTH, SCREENHEIGHT) / 200);
+
+  // [PN] Copy the scene so the shader can smear the background behind the fuzz.
+  smear = gld_BindFuzzScene(cell);
 
   // shader init
-  glsl_PushFuzzShader(gametic, sprite, ratio);
+  glsl_PushFuzzShader(gametic, sprite, ratio, smear);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  // The shader mixes the fuzz with the shifted background itself
+  if (smear)
+    glDisable(GL_BLEND);
 
   // for indexed lightmode, the fuzz color needs to take
   // pain/item fades and gamma into account, so do a color
@@ -779,6 +790,8 @@ void gld_StartFuzz(int sprite, float ratio)
 void gld_EndFuzz()
 {
   glsl_PopFuzzShader();
+  glEnable(GL_BLEND);
+  gld_UnbindFuzzScene();
 }
 
 void gld_DrawWeapon(int weaponlump, vissprite_t *vis, int lightlevel)

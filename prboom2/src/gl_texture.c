@@ -1347,6 +1347,119 @@ static const float fuzz[50] =
 
 static GLuint fuzz_texid = 0;
 
+// [PN] Scene copy for the fuzz smear; with blit support stored vertically
+// downscaled by the macro-pixel cell (the smear reads one row per cell).
+static GLuint fuzzscene_texid = 0;
+static GLuint fuzzscene_fbo = 0;
+static GLint fuzzscene_prev = 0;
+static int fuzzscene_width = 0;
+static int fuzzscene_height = 0;
+static int fuzzscene_cell = 0;
+static int fuzzscene_tic = -1; // [PN] one snapshot per game tic
+static dboolean fuzzscene_ok = true;
+static dboolean fuzzscene_probe = true;
+
+dboolean gld_BindFuzzScene(int cell)
+{
+  if (cell < 1)
+    cell = 1;
+
+  GLEXT_glActiveTextureARB(GL_TEXTURE2_ARB);
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &fuzzscene_prev);
+
+  if (fuzzscene_texid == 0)
+    glGenTextures(1, &fuzzscene_texid);
+
+  glBindTexture(GL_TEXTURE_2D, fuzzscene_texid);
+
+  const int tex_h = gl_ext_framebuffer_blit ? SCREENHEIGHT / cell : SCREENHEIGHT;
+
+  if (fuzzscene_width != SCREENWIDTH || fuzzscene_height != tex_h || fuzzscene_cell != cell)
+  {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCREENWIDTH, tex_h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    // [PN] A blit can only land in a framebuffer, not in a bare texture, so
+    // wrap the scene texture in a one-color-attachment FBO once. The current
+    // draw target (the scene FBO) is saved and restored around the setup.
+    if (gl_ext_framebuffer_blit && fuzzscene_fbo == 0)
+    {
+      GLint prev_fbo = 0;
+
+      glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING_EXT, &prev_fbo);
+      GLEXT_glGenFramebuffersEXT(1, &fuzzscene_fbo);
+      GLEXT_glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fuzzscene_fbo);
+      GLEXT_glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+                                      GL_TEXTURE_2D, fuzzscene_texid, 0);
+      GLEXT_glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, prev_fbo);
+    }
+
+    fuzzscene_width = SCREENWIDTH;
+    fuzzscene_height = tex_h;
+    fuzzscene_cell = cell;
+    fuzzscene_ok = true;
+    fuzzscene_probe = true;
+  }
+
+  // [PN] One snapshot per frame: every fuzz sprite of the tic reuses it. The
+  // trade-off is no fuzz-on-fuzz stacking (each sprite smears the world, not
+  // each other), which is the accepted "single buffer" behavior upstream
+  if (fuzzscene_ok && fuzzscene_tic != gametic)
+  {
+    // [PN] glGetError flushes the pipeline; checking it per fuzz sprite stalls
+    // rendering, so only the first copy after (re)allocation is probed.
+    // A multisampled frame buffer can't be copied directly
+    if (fuzzscene_probe)
+    while (glGetError() != GL_NO_ERROR);
+
+    // [PN] The capture itself: point the draw framebuffer at the wrapper FBO
+    // while the read framebuffer stays on whatever the scene renders into,
+    // then blit a (height * cell) tall source into the shorter texture, which
+    // is the NEAREST vertical downscale by cell. Without blit support fall
+    // back to a 1:1 copy into the full-height texture.
+    if (gl_ext_framebuffer_blit && fuzzscene_fbo)
+    {
+      // Reads whatever the scene renders into (scene FBO or back buffer)
+      GLint prev_fbo = 0;
+
+      glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING_EXT, &prev_fbo);
+      GLEXT_glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, fuzzscene_fbo);
+      GLEXT_glBlitFramebufferEXT(0, 0, fuzzscene_width, fuzzscene_height * cell,
+                                 0, 0, fuzzscene_width, fuzzscene_height,
+                                 GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      GLEXT_glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, prev_fbo);
+    }
+    else
+    {
+      glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0,
+                          fuzzscene_width, fuzzscene_height);
+    }
+
+    if (fuzzscene_probe && glGetError() != GL_NO_ERROR)
+      fuzzscene_ok = false;
+
+    if (fuzzscene_ok)
+      fuzzscene_tic = gametic;
+
+    fuzzscene_probe = false;
+  }
+
+  GLEXT_glActiveTextureARB(GL_TEXTURE0_ARB);
+
+  return fuzzscene_ok;
+}
+
+void gld_UnbindFuzzScene(void)
+{
+  GLEXT_glActiveTextureARB(GL_TEXTURE2_ARB);
+  glBindTexture(GL_TEXTURE_2D, fuzzscene_prev);
+  GLEXT_glActiveTextureARB(GL_TEXTURE0_ARB);
+}
+
 void gld_InitFuzzTexture(void)
 {
   if (fuzz_texid == 0)
@@ -1428,6 +1541,25 @@ void gld_FlushTextures(void)
     glDeleteTextures(1, &fuzz_texid);
     fuzz_texid = 0;
   }
+
+  if (fuzzscene_texid)
+  {
+    glDeleteTextures(1, &fuzzscene_texid);
+    fuzzscene_texid = 0;
+  }
+
+  if (fuzzscene_fbo)
+  {
+    GLEXT_glDeleteFramebuffersEXT(1, &fuzzscene_fbo);
+    fuzzscene_fbo = 0;
+  }
+
+  fuzzscene_width = 0;
+  fuzzscene_height = 0;
+  fuzzscene_cell = 0;
+  fuzzscene_tic = -1;
+  fuzzscene_ok = true;
+  fuzzscene_probe = true;
 
   gld_ResetLastTexture();
 
