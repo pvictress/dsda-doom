@@ -1355,7 +1355,7 @@ static GLint fuzzscene_prev = 0;
 static int fuzzscene_width = 0;
 static int fuzzscene_height = 0;
 static int fuzzscene_cell = 0;
-static int fuzzscene_tic = -1; // [PN] one snapshot per game tic
+static int fuzzscene_frame = -1; // [PN] one snapshot per rendered frame
 static dboolean fuzzscene_ok = true;
 static dboolean fuzzscene_probe = true;
 
@@ -1401,14 +1401,16 @@ dboolean gld_BindFuzzScene(int cell)
     fuzzscene_width = SCREENWIDTH;
     fuzzscene_height = tex_h;
     fuzzscene_cell = cell;
+    fuzzscene_frame = -1;
     fuzzscene_ok = true;
     fuzzscene_probe = true;
   }
 
-  // [PN] One snapshot per frame: every fuzz sprite of the tic reuses it. The
-  // trade-off is no fuzz-on-fuzz stacking (each sprite smears the world, not
-  // each other), which is the accepted "single buffer" behavior upstream
-  if (fuzzscene_ok && fuzzscene_tic != gametic)
+  // [PN] One snapshot per rendered frame: every fuzz sprite of the frame
+  // reuses it. The trade-off is no fuzz-on-fuzz stacking (each sprite smears
+  // the world, not each other), which is the accepted "single buffer"
+  // behavior upstream.
+  if (fuzzscene_ok && fuzzscene_frame != rendermarker)
   {
     // [PN] glGetError flushes the pipeline; checking it per fuzz sprite stalls
     // rendering, so only the first copy after (re)allocation is probed.
@@ -1425,12 +1427,19 @@ dboolean gld_BindFuzzScene(int cell)
     {
       // Reads whatever the scene renders into (scene FBO or back buffer)
       GLint prev_fbo = 0;
+      GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
 
       glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING_EXT, &prev_fbo);
       GLEXT_glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, fuzzscene_fbo);
+      // [PN] glBlitFramebuffer clips the destination by the scissor box,
+      // which during the world pass only covers the 3D viewport; with the
+      // status bar on that chops the bottom of the downscaled snapshot
+      glDisable(GL_SCISSOR_TEST);
       GLEXT_glBlitFramebufferEXT(0, 0, fuzzscene_width, fuzzscene_height * cell,
                                  0, 0, fuzzscene_width, fuzzscene_height,
                                  GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      if (scissor)
+        glEnable(GL_SCISSOR_TEST);
       GLEXT_glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, prev_fbo);
     }
     else
@@ -1443,7 +1452,7 @@ dboolean gld_BindFuzzScene(int cell)
       fuzzscene_ok = false;
 
     if (fuzzscene_ok)
-      fuzzscene_tic = gametic;
+      fuzzscene_frame = rendermarker;
 
     fuzzscene_probe = false;
   }
@@ -1557,7 +1566,7 @@ void gld_FlushTextures(void)
   fuzzscene_width = 0;
   fuzzscene_height = 0;
   fuzzscene_cell = 0;
-  fuzzscene_tic = -1;
+  fuzzscene_frame = -1;
   fuzzscene_ok = true;
   fuzzscene_probe = true;
 
