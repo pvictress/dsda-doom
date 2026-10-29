@@ -764,8 +764,11 @@ void gld_StartFuzz(int sprite, float ratio)
   color_rgb_t color;
   dboolean smear;
 
-  // [PN] Copy the scene so the shader can smear the background behind the fuzz
-  smear = gld_BindFuzzScene();
+  // [PN] Mirrors the cell the shader uses for smear sampling.
+  const int cell = ratio > 0.0f ? (int)ratio : MAX(1, MIN(SCREENWIDTH, SCREENHEIGHT) / 200);
+
+  // [PN] Copy the scene so the shader can smear the background behind the fuzz.
+  smear = gld_BindFuzzScene(cell);
 
   // shader init
   glsl_PushFuzzShader(gametic, sprite, ratio, smear);

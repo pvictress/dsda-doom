@@ -367,7 +367,7 @@ GLTexture *gld_RegisterColormapTexture(int palette_index, int gamma_level, dbool
 void gld_BindColormapTexture(GLTexture *gltexture, int palette_index, int gamma_level, dboolean fullbright);
 void gld_InitColormapTextures(dboolean fullbright);
 void gld_InitFuzzTexture(void);
-dboolean gld_BindFuzzScene(void);
+dboolean gld_BindFuzzScene(int cell);
 void gld_UnbindFuzzScene(void);
 int gld_GetTexDimension(int value);
 void gld_SetIndexedPalette(int palette_index);

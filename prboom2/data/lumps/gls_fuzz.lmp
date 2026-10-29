@@ -57,18 +57,17 @@ void main()
 
   if (cell == 0.0)
     cell = max(1.0, floor(min(scene_d.x, scene_d.y) / 200.0));
+ 
+  // Darkness is always one of the exact FUZZ1..5 constants, so the row
+  // count is recovered by midpoint comparisons instead of two log() per pixel.
+  float steps = 1.0 + float(d > 0.264706) + float(d > 0.401961)
+                    + float(d > 0.513726) + float(d > 0.605882);
 
-  float top = (floor(gl_FragCoord.y / cell) + 1.0) * cell;
-  // FUZZ1 from gl_texture.c (i.e. 0.188235294117647):
-  const float fuzz_step = 48.0 / 255.0;
-  float steps = floor(log(1.0 - d) / log(1.0 - fuzz_step) + 0.5);
-  steps = clamp(steps, 1.0, 5.0);
+  // The scene copy is stored downscaled by cell: texel (t) holds a row
+  // of source cell row t, which is (steps) rows above the pixel's own cell
+  float t = floor(gl_FragCoord.y / cell) + steps - 1.0;
 
-  float y = top - 1.5;
-  if (steps > 1.5)
-    y = top + (steps - 1.0) * cell - 1.5;
-
-  vec3 bg = texture2D(scene, vec2(gl_FragCoord.x / scene_d.x, y / scene_d.y)).rgb;
+  vec3 bg = texture2D(scene, vec2(gl_FragCoord.x / scene_d.x, t * cell / scene_d.y)).rgb;
   gl_FragColor = vec4(mix(bg, gl_Color.rgb, alpha), alpha);
  }
  else
